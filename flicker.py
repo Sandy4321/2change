@@ -7,8 +7,6 @@
 # | |    | | | (__|   <  __/ |   
 # |_|    |_|_|\___|_|\_\___|_|   
                                 
-# max. of 5 session blocks per day, i.e. max 5*90 trials
-
 from __future__ import division
 import sys
 sys.path.append('c:/')
@@ -20,10 +18,7 @@ sys.stderr = open('errorlog.txt', 'w')
 
 # HELPER CLASSES
 class Image(Box):
-    """
-    Image class. Loads image #`index` from `stimuli` list/folder. 
-    Image is scaled by scaling factor and centered at (400, 150).
-    """
+    """Load image #`index` from `files` list and center it at (400, 150). """
     def __init__(self, index):
         super(Image, self).__init__()
         self.image = pygame.image.load(files[index]).convert_alpha()
@@ -33,7 +28,7 @@ class Image(Box):
         self.name = files[index][15:-4]
 
 class Button(Box):
-    """Button class for the correct and incorrect icons."""
+    """Button icons for the correct and incorrect icons."""
     def __init__(self, file, pos):
         super(Button, self).__init__()
         image = pygame.image.load(file).convert_alpha()
@@ -45,9 +40,8 @@ class Button(Box):
         self.mask = pygame.mask.from_surface(self.image)
 
 class Trial(object):
+    """Initialise trial with properties set to 0 or empty. """
     def __init__(self, phase):
-        """Initialise trial with properties set to 0 or empty. `start` is True 
-           when search display is presented, False when choice occurs."""
         self.phase = phase
         self.block = 0
         self.number = 0
@@ -57,12 +51,12 @@ class Trial(object):
         self.wasCorrect = None
         self.t0 = 0
         self.RT = 0
-        self.screen = 'Start'
+        self.screen = None
 
     def new(self):
         """
         Determine block and trial number. Set `screen` to 'Start' to present 
-        start box. Make stimuli and reset cursor.
+        start box. Set trial parameters. Make stimuli and reset cursor.
         """
         if self.number % BLOCK_LENGTH == 0:
             self.newBlock()
@@ -91,10 +85,9 @@ class Trial(object):
     def newBlock(self):
         """
         Overwrite `data/num_sessions.txt` with finished session number 
-        (for training phase only if 80% criterion met). Quit program if 
-        criterion for finished sessions was met. Increment block counter, 
-        reset trial and numCorrect counts, and pseudo-randomise params for 
-        next block.
+        (for training phase only if 80% criterion met in last block). Adjust if
+        it was already incremented 'today'. Increment block counter, reset 
+        trial and numCorrect counts, and pseudo-randomize params for next block.
         """
         global sessionNum
 
@@ -114,51 +107,68 @@ class Trial(object):
                 if lastDate == today:   sfl.write(phase + '\n' + str(sessionNum - 1))
                 else:                   sfl.write(phase + '\n' + str(sessionNum))
 
+        # max. 5 session blocks per testing day
+        if self.block >= 5:
+            pygame.quit()
+            sys.exit()
+
         self.block += 1
         self.number = 0
         self.numCorrect = 0
         random.shuffle(paramList)
+        random.shuffle(files)
 
     def makeStimuli(self):
-        """Pick two non-identical stimuli."""
-        idx = random.sample(range(len(files)), self.isChanged + 1)
-        self.stimuli = [Image(i) for i in idx]
+        """
+        Pick new sample from randomized file list (makes it non-repeating 
+        within this block). If sample is supposed to change, then pick another,
+        different image.
+        """
+        self.stimuli = [Image(self.number - 1)]
+
+        if self.isChanged:
+            lst = range(1, self.number) + range(self.number + 1, len(files))
+            self.stimuli += [Image(random.choice(lst))]
 
     def start(self):
-        """Draw startbox, show search display upon collision."""
+        """Draw startbox, show sample upon collision."""
         mvCursor(cursor, only = 'up')
 
         startbox.draw(bg)
         bg.blit(starttext, startpos)
         cursor.draw(bg)
 
-        # collision check
         if cursor.pxCollide(startbox):
             cursor.mv2pos((400, 450))
 
-            # display search display for specified delay
             self.stimuli[0].draw(bg)
             self.screen = 'Sample'
 
     def sample(self):
+        """Display sample for specified duration."""
         pygame.time.delay(self.params[0])
         self.screen = 'Flicker'
 
     def flicker(self):
+        """
+        Display blank screen (flicker) for specified duration. At the end, 
+        start timer for RT.
+        """
         pygame.time.delay(self.params[1])
         self.screen = 'Test'
         self.t0 = pygame.time.get_ticks()
 
     def test(self):
-        """Display matches, upon selection: pellet (if correct) or timeout
-           (if incorrect)."""
+        """
+        Display test image. If time out (after 5s), repeat trial. If selection, 
+        whoop + pellet (if correct) or buzz + timeout (if incorrect).
+        """
         self.stimuli[self.isChanged].draw(bg)
 
         mvCursor(cursor, only = 'right, left')
         cursor.draw(bg)
 
         select = cursor.collide(buttons)
-
         for b in buttons:   b.draw(bg)
 
         self.RT = pygame.time.get_ticks() - self.t0
@@ -185,6 +195,7 @@ class Trial(object):
             self.screen = 'Outcome'
 
     def outcome(self):
+        """If choice was wrong, give timeout. Begin new trial."""
         if not self.wasCorrect:
             pygame.time.delay(TIMEOUT)
 
@@ -202,6 +213,7 @@ class Trial(object):
 
 # SETUP
 # load (completed) session number from previous session
+# and check if it was incremented 'today'
 sessionFile = 'data/num_sessions.txt'
 lastRun = 'data/last_completed.txt'
 
@@ -244,7 +256,7 @@ DURATION_MASK = [0, 50, 100, 250, 500, 1000]
 REPS = 3
 TIMEOUT = 3000
 
-# set screen; define cursor; make left/right positions
+# set screen; define cursor
 screen = setScreen()
 cursor = Box(circle = True)
 
