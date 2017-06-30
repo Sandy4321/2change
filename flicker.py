@@ -52,6 +52,7 @@ class Trial(object):
         self.t0 = 0
         self.RT = 0
         self.screen = None
+        self.idx = 0
 
     def new(self):
         """
@@ -79,7 +80,7 @@ class Trial(object):
         """
         self.screen = 'Start'
 
-        self.makeStimuli()
+        self.makeStimuli(True)
         cursor.mv2pos((400, 350))
 
     def newBlock(self):
@@ -118,16 +119,20 @@ class Trial(object):
         random.shuffle(paramList)
         random.shuffle(files)
 
-    def makeStimuli(self):
+    def makeStimuli(self, repeat = False):
         """
         Pick new sample from randomized file list (makes it non-repeating 
-        within this block). If sample is supposed to change, then pick another,
+        within this block) -- except when it's repeated --> so images can't get 
+        depleted. If sample is supposed to change, then pick another,
         different image.
         """
-        self.stimuli = [Image(self.number - 1)]
+        if repeat:  self.idx = random.choice(range(0, self.idx) + range(self.idx + 1, len(files)))
+        else:       self.idx = self.number - 1
+
+        self.stimuli = [Image(self.idx)]
 
         if self.isChanged:
-            lst = range(1, self.number) + range(self.number + 1, len(files))
+            lst = range(0, self.idx) + range(self.idx + 1, len(files))
             self.stimuli += [Image(random.choice(lst))]
 
     def start(self):
