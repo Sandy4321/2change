@@ -1,5 +1,5 @@
 #!/bin/sh
 cd -- "$(dirname "$0")"
-python flicker.py
+python 2change.py
 python popup.py
 exit 0

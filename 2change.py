@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 
-#  ______ _ _      _             
-# |  ____| (_)    | |            
-# | |__  | |_  ___| | _____ _ __ 
-# |  __| | | |/ __| |/ / _ \ '__|
-# | |    | | | (__|   <  __/ |   
-# |_|    |_|_|\___|_|\_\___|_|   
-                                
+#   ___     _____ _                            
+#  |__ \   / ____| |                           
+#     ) | | |    | |__   __ _ _ __   __ _  ___ 
+#    / /  | |    | '_ \ / _` | '_ \ / _` |/ _ \
+#   / /_  | |____| | | | (_| | | | | (_| |  __/
+#  |____|  \_____|_| |_|\__,_|_| |_|\__, |\___|
+#                                    __/ |     
+#                                   |___/                                      
+
 from __future__ import division
 import sys
 sys.path.append('c:/')
@@ -22,6 +24,8 @@ class Image(Box):
     def __init__(self, index):
         super(Image, self).__init__()
         self.image = pygame.image.load(files[index]).convert_alpha()
+        if files[index][-4:]:
+            self.image = pygame.transform.smoothscale(self.image, (233, 200))
         self.rect = self.image.get_rect()
         self.rect.center = self.pos = (400, 175)
         self.mask = pygame.mask.from_surface(self.image)
@@ -67,7 +71,7 @@ class Trial(object):
         self.isChanged = int(random.getrandbits(1))
 
         if phase == 'Training': self.params = [5000, 0]
-        else:                   self.params = paramList[self.number]
+        else:                   self.params = paramList[self.number - 1]
 
         self.makeStimuli()
         cursor.mv2pos((400, 350))
@@ -262,7 +266,7 @@ REPS = 3
 TIMEOUT = 3000
 
 # set screen; define cursor
-screen = setScreen()
+screen = setScreen(False)
 cursor = Box(circle = True)
 
 # define start box
@@ -286,7 +290,7 @@ if phase != 'Training':
 
 # load file list
 if phase == 'Training': files = glob.glob('phase1_stimuli/*.gif')
-else:                   files = glob.glob('phase2_stimuli/*.GIF')
+else:                   files = glob.glob('phase2_stimuli/*.bmp')
 
 # start clock
 clock = pygame.time.Clock()
