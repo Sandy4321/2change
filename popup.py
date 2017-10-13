@@ -15,7 +15,7 @@ def main():
         sessionNum = 0
 
     if phase == 'Training': critSessionNum = 2
-    else:                   critSessionNum = 20
+    else:                   critSessionNum = 40
 
     if sessionNum >= critSessionNum:
         root = Tkinter.Tk()
