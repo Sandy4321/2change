@@ -19,6 +19,20 @@ from lrc import *
 sys.stderr = open('errorlog.txt', 'w')
 
 # HELPER CLASSES
+def delay(milliseconds):
+    """
+    Wait for a number of milliseconds. Still allows to quit out of 
+    programme.
+    """
+    elapsed = 0
+    while elapsed < milliseconds/1000:
+        for event in pygame.event.get():
+            if event.type == QUIT or (event.type == KEYDOWN and event.key == K_q):
+                pygame.quit()
+                sys.exit()
+            if event.type == TICK:
+                elapsed += 1
+
 class Image(Box):
     """Load image #`index` from `files` list and center it at (400, 150). """
     def __init__(self, index):
@@ -47,7 +61,8 @@ class Trial(object):
     """Initialise trial with properties set to 0 or empty. """
     def __init__(self, phase):
         self.phase = phase
-        self.block = 0
+        if self.phase == 'Training':    self.block = 0
+        else:                           self.block = sessionNum
         self.number = 0
         self.numCorrect = 0
         self.stimuli = []
@@ -55,7 +70,7 @@ class Trial(object):
         self.wasCorrect = None
         self.t0 = 0
         self.RT = 0
-        self.screen = None
+        self.isStartScreen = None
         self.idx = 0
 
     def new(self):
@@ -67,8 +82,8 @@ class Trial(object):
             self.newBlock()
 
         self.number += 1
-        self.screen = 'Start'
-        self.isChanged = int(random.getrandbits(1))
+        self.isStartScreen = True
+        self.isChanged = isChangedList[self.number - 1]
 
         if phase == 'Training': self.params = [5000, 0]
         else:                   self.params = paramList[self.number - 1]
@@ -82,7 +97,7 @@ class Trial(object):
         Set `screen` to 'Start' to present start box. Make stimuli and 
         reset cursor.
         """
-        self.screen = 'Start'
+        self.isStartScreen = True
 
         self.makeStimuli(True)
         cursor.mv2pos((400, 350))
@@ -90,44 +105,48 @@ class Trial(object):
     def newBlock(self):
         """
         Overwrite `data/num_sessions.txt` with finished session number 
-        (for training phase only if 80% criterion met in last block). Adjust if
+        (for training phase only if 80% criterion met in *last* block). Adjust if
         it was already incremented 'today'. Increment block counter, reset 
         trial and numCorrect counts, and pseudo-randomize params for next block.
         """
-        global sessionNum
 
-        # if at least one block of test condition completed, increment `num_sessions.txt`
-        # if current completed training block met criterion, increment `num_sessions.txt`
-        if (phase == 'Test' and self.block == 1) or \
-           (phase == 'Training' and self.numCorrect >= .8*BLOCK_LENGTH):
+        # if at least one block of test condition/s completed, increment `num_sessions.txt`
+        if 'Test' in phase and self.block > 0:
+            with open(sessionFile, 'w') as sfl:
+                sfl.write(phase + '\n' + str(self.block))
+
+        if phase == 'Training' and self.block > 0:
             with open(lastRun, 'w') as sfl:       sfl.write(today)
-            with open(sessionFile, 'w') as sfl:
-                if lastDate == today:   sfl.write(phase + '\n' + str(sessionNum))
-                else:                   sfl.write(phase + '\n' + str(sessionNum + 1))
 
-        # if current completed training block didn't meet criterion, reset `num_sessions.txt`
-        elif (phase == 'Training' and self.numCorrect < .8*BLOCK_LENGTH):
-            with open(lastRun, 'w') as sfl:       sfl.write('')
-            with open(sessionFile, 'w') as sfl:
-                if lastDate == today:   sfl.write(phase + '\n' + str(sessionNum - 1))
-                else:                   sfl.write(phase + '\n' + str(sessionNum))
+            # if current completed training block met criterion, increment `num_sessions.txt`
+            if self.numCorrect >= .8*BLOCK_LENGTH:
+                with open(sessionFile, 'w') as sfl:
+                    if lastDate == today:   sfl.write(phase + '\n' + str(sessionNum))
+                    else:                   sfl.write(phase + '\n' + str(sessionNum + 1))
 
-        # max. 5 session blocks per testing day
-        if self.block >= 5:
+            # if current completed training block didn't meet criterion, reset `num_sessions.txt`
+            else:
+                with open(sessionFile, 'w') as sfl:
+                    if lastDate == today:   sfl.write(phase + '\n' + str(sessionNum - 1))
+                    else:                   sfl.write(phase + '\n' + str(sessionNum))
+
+        if ('Test' in self.phase) and (self.block >= NUM_SESSIONS):
             pygame.quit()
             sys.exit()
 
         self.block += 1
         self.number = 0
         self.numCorrect = 0
+        random.shuffle(isChangedList)
         random.shuffle(paramList)
         random.shuffle(files)
 
     def makeStimuli(self, repeat = False):
         """
         Pick new sample from randomized file list (makes it non-repeating 
-        within this block) -- except when it's repeated --> so images can't get 
-        depleted. If sample is supposed to change, then pick another,
+        within this block). Except, if this trial is repeated, then pick a 
+        random sample (that is not one presented right before) so images can't 
+        get depleted. If sample is supposed to change, then pick another,
         different image.
         """
         if repeat:  self.idx = random.choice(range(0, self.idx) + range(self.idx + 1, len(files)))
@@ -150,22 +169,19 @@ class Trial(object):
         if cursor.pxCollide(startbox):
             cursor.mv2pos((400, 450))
 
+            # show sample
             self.stimuli[0].draw(bg)
-            self.screen = 'Sample'
+            refresh(screen)
+            delay(self.params[0])
 
-    def sample(self):
-        """Display sample for specified duration."""
-        pygame.time.delay(self.params[0])
-        self.screen = 'Flicker'
+            # show blank flicker
+            bg.fill(Color('white'))
+            refresh(screen)
+            delay(self.params[1])
 
-    def flicker(self):
-        """
-        Display blank screen (flicker) for specified duration. At the end, 
-        start timer for RT.
-        """
-        pygame.time.delay(self.params[1])
-        self.screen = 'Test'
-        self.t0 = pygame.time.get_ticks()
+            # show test screen, start measuring RT
+            self.isStartScreen = False
+            self.t0 = pygame.time.get_ticks()
 
     def test(self):
         """
@@ -183,8 +199,8 @@ class Trial(object):
         self.RT = pygame.time.get_ticks() - self.t0
 
         # timeout after 5s --> repeat trial
-        if self.RT >= 5000:
-            self.RT = 5000
+        if self.RT >= RESPONSE_WINDOW:
+            self.RT = RESPONSE_WINDOW
             self.wasCorrect = 'NA'
             self.write(file)
             self.repeat()
@@ -200,15 +216,9 @@ class Trial(object):
                 pellet()
             else:
                 bg.fill(Color('grey'))
-
-            self.screen = 'Outcome'
-
-    def outcome(self):
-        """If choice was wrong, give timeout. Begin new trial."""
-        if not self.wasCorrect:
-            pygame.time.delay(TIMEOUT)
-
-        self.new()
+                refresh(screen)
+                delay(TIMEOUT)
+            self.new()
 
     def write(self, file):
         """Write data to file."""
@@ -252,21 +262,28 @@ if sessionNum >= critSessionNum:
 if not os.path.exists('data'):
     os.makedirs('data')
 
-file = 'data/' + makeFileName('flicker')
+file = 'data/' + makeFileName('2change')
 header = ['monkey', 'date', 'time', 'phase', 'block', 'trial', 'isChanged?', 'search_img', 'test_img', 'dur_search', 'dur_flicker', 'RT', 'wasCorrect?']
 writeLn(file, header)
 # print header
 
 
 # set parameters
-BLOCK_LENGTH = 90
+if phase == 'Training':
+    BLOCK_LENGTH = 90
+    REPS = 3
+else:
+    BLOCK_LENGTH = 120
+    REPS = 4
+
 DURATION_SEARCH_DISPLAY = [250, 500, 1000, 2500, 5000]
 DURATION_MASK = [0, 50, 100, 250, 500, 1000]
-REPS = 3
-TIMEOUT = 3000
+RESPONSE_WINDOW = 5000
+TIMEOUT = 20000
+NUM_SESSIONS = 40
 
 # set screen; define cursor
-screen = setScreen(False)
+screen = setScreen()
 cursor = Box(circle = True)
 
 # define start box
@@ -278,8 +295,10 @@ startpos = starttext.get_rect(centerx = 400, centery = 175)
 # define buttons
 buttons = [Button('change.png', (200, 450)), Button('nochange.png', (600, 450))]
 
+# create list of changed/isn't changed
+isChangedList = BLOCK_LENGTH//2 * [0, 1]
+
 # create list of delays for a block (for pseudo-randomisation)
-# delayList = delay * reps
 paramList = []
 
 if phase != 'Training':
@@ -290,10 +309,14 @@ if phase != 'Training':
 
 # load file list
 if phase == 'Training': files = glob.glob('phase1_stimuli/*.gif')
-else:                   files = glob.glob('phase2_stimuli/*.bmp')
+elif phase == 'Test1':  files = glob.glob('phase2_stimuli/*.bmp')
+elif phase == 'Test2':  pass
+elif phase == 'Test3':  pass
 
 # start clock
 clock = pygame.time.Clock()
+TICK = USEREVENT + 1
+pygame.time.set_timer(TICK, 1000)
 
 
 # MAIN GAME LOOP: start first trial
@@ -305,11 +328,8 @@ while True:
 
     bg.fill(Color('white'))
 
-    if trial.screen == 'Start':      trial.start()
-    elif trial.screen == 'Sample':   trial.sample()
-    elif trial.screen == 'Flicker':  trial.flicker()
-    elif trial.screen == 'Test':     trial.test()
-    else:                            trial.outcome()
+    if trial.isStartScreen:  trial.start()
+    else:                    trial.test()
 
     refresh(screen)
     clock.tick(fps)
