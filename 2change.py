@@ -28,6 +28,7 @@ def delay(milliseconds):
     while elapsed < milliseconds/1000:
         for event in pygame.event.get():
             if event.type == QUIT or (event.type == KEYDOWN and event.key == K_q):
+                if file:    writeLn(file)
                 pygame.quit()
                 sys.exit()
             if event.type == TICK:
@@ -35,15 +36,32 @@ def delay(milliseconds):
 
 class Image(Box):
     """Load image #`index` from `files` list and center it at (400, 150). """
-    def __init__(self, index):
+    def __init__(self, index, version = 0):
         super(Image, self).__init__()
-        self.image = pygame.image.load(files[index]).convert_alpha()
-        if files[index][-4:]:
+
+        if type(files[index]) is str:   self.folder = int(files[index][5:6])
+        else:                           self.folder = int(files[index][0][5:6])
+
+        # load image depending on folder
+        # if phase3/4 (test2/3), then load correct version. version 0 = original
+        if self.folder <= 2: self.image = pygame.image.load(files[index]).convert_alpha()
+        else:                self.image = pygame.image.load(files[index][version]).convert_alpha()
+
+        # scale image depending on folder
+        if self.folder == 2:
             self.image = pygame.transform.smoothscale(self.image, (233, 200))
+        elif self.folder == 3:
+            self.image = pygame.transform.smoothscale(self.image, (300, 300))
+        elif self.folder == 4:
+            self.image = pygame.transform.smoothscale(self.image, (400, 300))
+
+        # if checkerboard, offset from the middle so it appears in the middle
         self.rect = self.image.get_rect()
-        self.rect.center = self.pos = (400, 175)
-        self.mask = pygame.mask.from_surface(self.image)
-        self.name = files[index][15:-4]
+        if self.folder == 4:   self.rect.center = self.pos = (435, 175)
+        else:                  self.rect.center = self.pos = (400, 175)
+
+        if self.folder <=2:  self.name = files[index][15:-4]
+        else:                self.name = files[index][version][15:-4]
 
 class Button(Box):
     """Button icons for the correct and incorrect icons."""
@@ -67,6 +85,7 @@ class Trial(object):
         self.numCorrect = 0
         self.stimuli = []
         self.isChanged = None
+        self.sampleIsOccluded = 'NA'
         self.wasCorrect = None
         self.t0 = 0
         self.RT = 0
@@ -83,7 +102,9 @@ class Trial(object):
 
         self.number += 1
         self.isStartScreen = True
-        self.isChanged = isChangedList[self.number - 1]
+        self.isChanged = isChangedList[self.number - 1][0]
+        if phase == 'Test2':
+            self.sampleIsOccluded = isChangedList[self.number - 1][1]
 
         if phase == 'Training': self.params = [5000, 0]
         else:                   self.params = paramList[self.number - 1]
@@ -152,11 +173,22 @@ class Trial(object):
         if repeat:  self.idx = random.choice(range(0, self.idx) + range(self.idx + 1, len(files)))
         else:       self.idx = self.number - 1
 
-        self.stimuli = [Image(self.idx)]
+        # if Test2 (phase3), then sample is either the occluded one or the original one
+        # in all other phases, the sample is the original/only pic
+        if self.phase == 'Test2':   self.stimuli = [Image(self.idx, self.sampleIsOccluded)]
+        else:                       self.stimuli = [Image(self.idx)]
 
         if self.isChanged:
-            lst = range(0, self.idx) + range(self.idx + 1, len(files))
-            self.stimuli += [Image(random.choice(lst))]
+            if self.phase == 'Test2':
+                # changed image is occluded (if sample is original) or the original (if sample is occluded)
+                self.stimuli += [Image(self.idx, 1-self.sampleIsOccluded)]
+            elif self.phase == 'Test3':
+                # changed image is drawn from folder that corresponds to block
+                self.stimuli += [Image(self.idx, (self.block - 1) % 5 + 1)]
+            # Training/Test1
+            else:
+                lst = range(0, self.idx) + range(self.idx + 1, len(files))
+                self.stimuli += [Image(random.choice(lst))]
 
     def start(self):
         """Draw startbox, show sample upon collision."""
@@ -226,7 +258,7 @@ class Trial(object):
         if self.isChanged:  names = [s.name for s in self.stimuli]
         else:               names = [self.stimuli[0].name]*2
 
-        data = [monkey, today, now, phase, self.block, self.number, self.isChanged] + names + self.params + [self.RT, self.wasCorrect]
+        data = [monkey, today, now, phase, self.block, self.number, self.isChanged, self.sampleIsOccluded] + names + self.params + [self.RT, self.wasCorrect]
         writeLn(file, data)
         # print data
 
@@ -263,7 +295,7 @@ if not os.path.exists('data'):
     os.makedirs('data')
 
 file = 'data/' + makeFileName('2change')
-header = ['monkey', 'date', 'time', 'phase', 'block', 'trial', 'isChanged?', 'search_img', 'test_img', 'dur_search', 'dur_flicker', 'RT', 'wasCorrect?']
+header = ['monkey', 'date', 'time', 'phase', 'block', 'trial', 'isChanged?', 'sampleIsOccluded?', 'search_img', 'test_img', 'dur_search', 'dur_flicker', 'RT', 'wasCorrect?']
 writeLn(file, header)
 # print header
 
@@ -296,7 +328,7 @@ startpos = starttext.get_rect(centerx = 400, centery = 175)
 buttons = [Button('change.png', (200, 450)), Button('nochange.png', (600, 450))]
 
 # create list of changed/isn't changed
-isChangedList = BLOCK_LENGTH//2 * [0, 1]
+isChangedList = zip(BLOCK_LENGTH//2 * [0] + BLOCK_LENGTH//2 * [1], BLOCK_LENGTH//2 * [0, 1])
 
 # create list of delays for a block (for pseudo-randomisation)
 paramList = []
@@ -310,8 +342,14 @@ if phase != 'Training':
 # load file list
 if phase == 'Training': files = glob.glob('phase1_stimuli/*.gif')
 elif phase == 'Test1':  files = glob.glob('phase2_stimuli/*.bmp')
-elif phase == 'Test2':  pass
-elif phase == 'Test3':  pass
+elif phase == 'Test2':  files = zip(glob.glob('phase3_stimuli/original/*.GIF'), glob.glob('phase3_stimuli/occluded/*.GIF'))
+elif phase == 'Test3':
+    files = zip(glob.glob('phase4_stimuli/original/*.jpg'),
+                glob.glob('phase4_stimuli/changed1/*.jpg'),
+                glob.glob('phase4_stimuli/changed2/*.jpg'),
+                glob.glob('phase4_stimuli/changed3/*.jpg'),
+                glob.glob('phase4_stimuli/changed4/*.jpg'),
+                glob.glob('phase4_stimuli/changed5/*.jpg'))
 
 # start clock
 clock = pygame.time.Clock()
