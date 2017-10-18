@@ -10,6 +10,7 @@
 #                                   |___/                                      
 
 from __future__ import division
+from itertools import groupby
 import sys
 sys.path.append('c:/')
 sys.path.append('..')
@@ -19,6 +20,22 @@ from lrc import *
 sys.stderr = open('errorlog.txt', 'w')
 
 # HELPER CLASSES
+def runsTooLong(l):
+    """
+    Gets run lengths of a list. Returns vector of booleans indicating 
+    whether runs are 3+ long.
+    """
+    return [len(list(group)) > 3 for name, group in groupby(l)]
+
+def pseudoRandomizeIsChangedList():
+    """Shuffle isChangedList until no runs are longer than 3."""
+    global isChangedList
+    x = [item[0] for item in isChangedList]
+
+    while any(runsTooLong(x)):
+        random.shuffle(isChangedList)
+        x = [item[0] for item in isChangedList]
+
 def delay(milliseconds):
     """
     Wait for a number of milliseconds. Still allows to quit out of 
@@ -151,14 +168,14 @@ class Trial(object):
                     if lastDate == today:   sfl.write(phase + '\n' + str(sessionNum - 1))
                     else:                   sfl.write(phase + '\n' + str(sessionNum))
 
-        if ('Test' in self.phase) and (self.block >= NUM_SESSIONS):
+        if ('Test' in self.phase) and (self.block >= NUM_TEST_SESSIONS):
             pygame.quit()
             sys.exit()
 
         self.block += 1
         self.number = 0
         self.numCorrect = 0
-        random.shuffle(isChangedList)
+        pseudoRandomizeIsChangedList()
         random.shuffle(paramList)
         random.shuffle(files)
 
@@ -283,8 +300,18 @@ if os.path.exists(lastRun):
 else:
     lastDate = ''
 
+# set parameters
+BLOCK_LENGTH = 120
+REPS = 4
+DURATION_SEARCH_DISPLAY = [250, 500, 1000, 2500, 5000]
+DURATION_MASK = [0, 50, 100, 250, 500, 1000]
+RESPONSE_WINDOW = 5000
+TIMEOUT = 20000
+NUM_TEST_SESSIONS = 40
+
+# check whether number of sessions was reached previously
 if phase == 'Training': critSessionNum = 2
-else:                   critSessionNum = 20
+else:                   critSessionNum = NUM_TEST_SESSIONS
 
 if sessionNum >= critSessionNum:
     pygame.quit()
@@ -299,20 +326,6 @@ header = ['monkey', 'date', 'time', 'phase', 'block', 'trial', 'isChanged?', 'sa
 writeLn(file, header)
 # print header
 
-
-# set parameters
-if phase == 'Training':
-    BLOCK_LENGTH = 90
-    REPS = 3
-else:
-    BLOCK_LENGTH = 120
-    REPS = 4
-
-DURATION_SEARCH_DISPLAY = [250, 500, 1000, 2500, 5000]
-DURATION_MASK = [0, 50, 100, 250, 500, 1000]
-RESPONSE_WINDOW = 5000
-TIMEOUT = 20000
-NUM_SESSIONS = 40
 
 # set screen; define cursor
 screen = setScreen()
@@ -342,7 +355,9 @@ if phase != 'Training':
 # load file list
 if phase == 'Training': files = glob.glob('phase1_stimuli/*.gif')
 elif phase == 'Test1':  files = glob.glob('phase2_stimuli/*.bmp')
-elif phase == 'Test2':  files = zip(glob.glob('phase3_stimuli/original/*.GIF'), glob.glob('phase3_stimuli/occluded/*.GIF'))
+elif phase == 'Test2':
+    files = zip(glob.glob('phase3_stimuli/original/*.GIF'), 
+                glob.glob('phase3_stimuli/occluded/*.GIF'))
 elif phase == 'Test3':
     files = zip(glob.glob('phase4_stimuli/original/*.jpg'),
                 glob.glob('phase4_stimuli/changed1/*.jpg'),
