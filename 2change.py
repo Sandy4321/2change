@@ -96,8 +96,8 @@ class Trial(object):
     """Initialise trial with properties set to 0 or empty. """
     def __init__(self, phase):
         self.phase = phase
-        if self.phase == 'Training':    self.block = 0
-        else:                           self.block = sessionNum
+        if self.phase == 'PreTraining':    self.block = 0
+        else:                              self.block = sessionNum
         self.number = 0
         self.numCorrect = 0
         self.stimuli = []
@@ -117,13 +117,16 @@ class Trial(object):
         if self.number % BLOCK_LENGTH == 0:
             self.newBlock()
 
+        if phase == 'PreTraining' and self.number % 6 == 0:
+            random.shuffle(files)
+
         self.number += 1
         self.isStartScreen = True
         self.isChanged = isChangedList[self.number - 1][0]
         if phase == 'Test2':
             self.sampleIsOccluded = isChangedList[self.number - 1][1]
 
-        if phase == 'Training': self.params = [5000, 0]
+        if 'Training' in phase: self.params = [5000, 0]
         else:                   self.params = paramList[self.number - 1]
 
         self.makeStimuli()
@@ -153,7 +156,7 @@ class Trial(object):
             with open(sessionFile, 'w') as sfl:
                 sfl.write(phase + '\n' + str(self.block))
 
-        if phase == 'Training' and self.block > 0:
+        if 'Training' in phase and self.block > 0:
             with open(lastRun, 'w') as sfl:       sfl.write(today)
 
             # if current completed training block met criterion, increment `num_sessions.txt`
@@ -190,6 +193,9 @@ class Trial(object):
         if repeat:  self.idx = random.choice(range(0, self.idx) + range(self.idx + 1, len(files)))
         else:       self.idx = self.number - 1
 
+        if phase == 'PreTraining':
+            self.idx %= 6
+
         # if Test2 (phase3), then sample is either the occluded one or the original one
         # in all other phases, the sample is the original/only pic
         if self.phase == 'Test2':   self.stimuli = [Image(self.idx, self.sampleIsOccluded)]
@@ -216,6 +222,8 @@ class Trial(object):
         cursor.draw(bg)
 
         if cursor.pxCollide(startbox):
+            bg.fill(Color('white'))
+            refresh(screen)
             cursor.mv2pos((400, 450))
 
             # show sample
@@ -291,7 +299,7 @@ if os.path.exists(sessionFile):
         phase = content[0].strip()
         sessionNum = int(content[1])
 else:   
-    phase = 'Training'
+    phase = 'PreTraining'
     sessionNum = 0
 
 if os.path.exists(lastRun):
@@ -301,7 +309,7 @@ else:
     lastDate = ''
 
 # set parameters
-BLOCK_LENGTH = 120
+BLOCK_LENGTH = 6
 REPS = 4
 DURATION_SEARCH_DISPLAY = [250, 500, 1000, 2500, 5000]
 DURATION_MASK = [0, 50, 100, 250, 500, 1000]
@@ -310,7 +318,7 @@ TIMEOUT = 20000
 NUM_TEST_SESSIONS = 40
 
 # check whether number of sessions was reached previously
-if phase == 'Training': critSessionNum = 2
+if 'Training' in phase: critSessionNum = 2
 else:                   critSessionNum = NUM_TEST_SESSIONS
 
 if sessionNum >= critSessionNum:
@@ -328,7 +336,7 @@ writeLn(file, header)
 
 
 # set screen; define cursor
-screen = setScreen()
+screen = setScreen(False)
 cursor = Box(circle = True)
 
 # define start box
@@ -346,15 +354,16 @@ isChangedList = zip(BLOCK_LENGTH//2 * [0] + BLOCK_LENGTH//2 * [1], BLOCK_LENGTH/
 # create list of delays for a block (for pseudo-randomisation)
 paramList = []
 
-if phase != 'Training':
+if 'Test' in phase:
     for r in range(REPS):
         for d_search in DURATION_SEARCH_DISPLAY:
             for d_mask in DURATION_MASK:
                 paramList.append([d_search, d_mask])
 
 # load file list
-if phase == 'Training': files = glob.glob('phase1_stimuli/*.gif')
-elif phase == 'Test1':  files = glob.glob('phase2_stimuli/*.bmp')
+if phase == 'Training':       files = glob.glob('phase1_stimuli/*.gif')
+elif phase == 'PreTraining':  files = glob.glob('phase0_stimuli/*.gif')
+elif phase == 'Test1':        files = glob.glob('phase2_stimuli/*.bmp')
 elif phase == 'Test2':
     files = zip(glob.glob('phase3_stimuli/original/*.GIF'), 
                 glob.glob('phase3_stimuli/occluded/*.GIF'))
