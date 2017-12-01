@@ -11,10 +11,10 @@ def main():
             phase = content[0].strip()
             sessionNum = int(content[1])
     else:   
-        phase = 'Training'
+        phase = 'PreTraining'
         sessionNum = 0
 
-    if phase == 'Training': critSessionNum = 2
+    if 'Training' in phase: critSessionNum = 2
     else:                   critSessionNum = 40
 
     if sessionNum >= critSessionNum:
