@@ -126,7 +126,7 @@ class Trial(object):
         if phase == 'Test2':
             self.sampleIsOccluded = isChangedList[self.number - 1][1]
 
-        if 'Training' in phase: self.params = [5000, 0]
+        if 'Training' in phase: self.params = [TRAINING_DURATION_SEARCH_DISPLAY, 0]
         else:                   self.params = paramList[self.number - 1]
 
         self.makeStimuli()
@@ -208,6 +208,9 @@ class Trial(object):
             elif self.phase == 'Test3':
                 # changed image is drawn from folder that corresponds to block
                 self.stimuli += [Image(self.idx, (self.block - 1) % 5 + 1)]
+            elif self.phase == 'Test4':
+                # changed image is drawn from folder that corresponds to block
+                self.stimuli += [Image(self.idx, (self.block - 1) % 3 + 1)]
             # Training/Test1
             else:
                 lst = range(0, self.idx) + range(self.idx + 1, len(files))
@@ -309,8 +312,9 @@ else:
     lastDate = ''
 
 # set parameters
-BLOCK_LENGTH = 6
+BLOCK_LENGTH = 120
 REPS = 4
+TRAINING_DURATION_SEARCH_DISPLAY = 1000
 DURATION_SEARCH_DISPLAY = [250, 500, 1000, 2500, 5000]
 DURATION_MASK = [0, 50, 100, 250, 500, 1000]
 RESPONSE_WINDOW = 5000
@@ -336,7 +340,7 @@ writeLn(file, header)
 
 
 # set screen; define cursor
-screen = setScreen(False)
+screen = setScreen()
 cursor = Box(circle = True)
 
 # define start box
@@ -374,6 +378,11 @@ elif phase == 'Test3':
                 glob.glob('phase4_stimuli/changed3/*.jpg'),
                 glob.glob('phase4_stimuli/changed4/*.jpg'),
                 glob.glob('phase4_stimuli/changed5/*.jpg'))
+elif phase == 'Test4':
+    files = zip(glob.glob('phase5_stimuli/original/*.jpg'),
+                glob.glob('phase5_stimuli/changed1/*.jpg'),
+                glob.glob('phase5_stimuli/changed2/*.jpg'),
+                glob.glob('phase5_stimuli/changed3/*.jpg'))
 
 # start clock
 clock = pygame.time.Clock()
